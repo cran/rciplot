@@ -1,7 +1,7 @@
 Package: rciplot
 Type: Package
 Title: Plot Jacobson-Truax Reliable Change Indices
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: person("Maximilian", "Hagspiel", role = c("aut", "cre","cph"), email = "maxhag@mailbox.org")
 Description: The concept of reliable and clinically significant change
     (Jacobson & Truax, 1991) helps you answer the following questions for a
@@ -27,8 +27,8 @@ Imports: dplyr, ggplot2, stats, tibble
 RoxygenNote: 7.2.2
 Depends: R (>= 2.10)
 NeedsCompilation: no
-Packaged: 2022-11-17 16:55:28 UTC; max
+Packaged: 2023-03-14 22:09:16 UTC; max
 Author: Maximilian Hagspiel [aut, cre, cph]
 Maintainer: Maximilian Hagspiel <maxhag@mailbox.org>
 Repository: CRAN
-Date/Publication: 2022-11-18 17:10:02 UTC
+Date/Publication: 2023-03-15 09:10:02 UTC

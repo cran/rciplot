@@ -15,8 +15,21 @@
 #' @param group Name of column by which cases are to be grouped (controls shape
 #' of scatter plot points)
 #' @param reliability Reliability of the used test / instrument
+#' @param reliable_change_alpha Probability of alpha error for the calculation
+#' of the critical distance which is the minimum pre-post difference to be
+#' regarded statistically significant
 #' @param recovery_cutoff Test score below which individuals are considered
 #' healthy / recovered
+#' @param classification_method What cutoff value is to be used to classify
+#' individuals into healthy / unhealthy individuals?
+#' Possible values:
+#' "recovery cutoff" = the so-named function parameter,
+#' "mid of means" = the exact numeric mid between the two function parameters
+#' mean_functional and mean_dysfunctional,
+#' "2 sd dysfunctional" = everybody with a score higher than 2 SD above the
+#' dysfunctional group mean is healthy
+#' "2 sd functional" = everybody with a score higher than 2 SD below the
+#' functional group mean is healthy
 #' @param show_classification_counts If TRUE, show number of cases for each
 #' classification (e.g. reliable improvement, no reliable change, ...) in legend
 #' @param show_classification_percentages Expanding on
@@ -62,6 +75,10 @@
 #'    \code{plot} \tab
 #'        ggplot2 scatter plot analogous to Figure 2 of Jacobson & Truax (1991)
 #'        \cr
+#'    \code{categorization} \tab
+#'        List containing categorization of all samples given in \code{data}.
+#'        Thus, has as many items as \code{data} has rows.
+#'        \cr
 #' }
 #'
 #' @examples
@@ -78,7 +95,7 @@
 #'
 #' @importFrom dplyr case_when filter mutate mutate_at pull recode
 #' @import ggplot2
-#' @importFrom stats sd
+#' @importFrom stats sd qnorm
 #' @import tibble
 #' @export
 
@@ -88,7 +105,9 @@ rciplot <- function(
     post = NULL,
     group = NULL,
     reliability = NULL,
+    reliable_change_alpha = 0.05,
     recovery_cutoff = NULL,
+    classification_method = 'recovery cutoff',
     show_classification_counts = TRUE,
     show_classification_percentages = TRUE,
     higher_is_better = TRUE,
@@ -105,13 +124,38 @@ rciplot <- function(
     sd_functional = 1,
     sd_dysfunctional = 1
 ) {
+    # Testing stuff
+    # data = df
+    # pre = 'pre_data'
+    # post = 'post_data'
+    # group = NULL
+    # reliability = .88
+    # reliable_change_alpha = .05
+    # recovery_cutoff = NULL
+    # classification_method = 'recovery cutoff'
+    # show_classification_counts = TRUE
+    # show_classification_percentages = TRUE
+    # higher_is_better = TRUE
+    # pre_jitter = 0
+    # post_jitter = 0
+    # opacity = .5
+    # size_points = 1
+    # size_lines = .3
+    # draw_meanmid_line = FALSE
+    # draw_2sd_functional_line = FALSE
+    # draw_2sd_dysfunctional_line = FALSE
+    # mean_functional = NULL
+    # mean_dysfunctional = NULL
+    # sd_functional = 1
+    # sd_dysfunctional = 1
     if (
         is.null(pre) |
         is.null(post) |
-        is.null(reliability)
+        is.null(reliability) |
+        is.null(recovery_cutoff)
     ) {
         stop(
-            'These parameters are not optional: pre, post, reliability',
+            'These parameters are not optional: pre, post, reliability, recovery_cutoff',
             call. = F
         )
     }
@@ -126,7 +170,9 @@ rciplot <- function(
     if (post_jitter)
         post_c <- jitter(post_c, post_jitter)
 
-    # Calc Critical Difference ---------------------------------------
+    # Calc Horizontal lines ------------------------------------------
+
+    # JT reliable change ...................................
     # RC = (x2 -x1) / S_diff
     # S_diff = sqrt(2 * (SEM)^2)
     # SEM = sd * sqrt(1 - rel)
@@ -146,7 +192,65 @@ rciplot <- function(
     #   1.96 * S_diff = (x2 - x1)  | solved!
     sem = sd(pre_c) * sqrt(1 - reliability)
     s_diff = sqrt(2 * sem^2)
-    diff_crit = 1.96 * s_diff
+    # Divide `reliable_change_alpha` by two because it's a two-sided
+    # significance
+    norm_alpha = qnorm(1 - (reliable_change_alpha / 2), 0, 1)
+    diff_crit = norm_alpha * s_diff
+
+    # Mid of means .........................................
+    midmean <- (
+        (
+            (sd_functional * mean_functional) +
+                (sd_dysfunctional * mean_dysfunctional)
+        ) / (
+            sd_functional + sd_dysfunctional
+        )
+    )
+
+    # 2 sd dysfunctional ...................................
+    twosd_dysfunctional_cutoff <- mean_dysfunctional
+    if (higher_is_better) {
+        twosd_dysfunctional_cutoff <- twosd_dysfunctional_cutoff +
+            (2 * sd_dysfunctional)
+    } else {
+        twosd_dysfunctional_cutoff <- twosd_dysfunctional_cutoff -
+            (2 * sd_functional)
+    }
+
+    # 2 sd functional ......................................
+    twosd_functional_cutoff <- mean_functional
+    if (higher_is_better) {
+        twosd_functional_cutoff <- twosd_functional_cutoff -
+            (2 * mean(sd_functional, sd_dysfunctional))
+    } else {
+        twosd_functional_cutoff <- twosd_functional_cutoff +
+            (2 * mean(sd_functional, sd_dysfunctional))
+    }
+
+    # ......................................................
+    # Set clinical significance cutoff .....................
+    if (classification_method == 'recovery cutoff') {
+        clinical_significance_cutoff <- recovery_cutoff
+    } else if (classification_method == 'mid of means') {
+        clinical_significance_cutoff <- midmean
+    } else if (classification_method == '2 sd dysfunctional') {
+        clinical_significance_cutoff <- twosd_dysfunctional_cutoff
+    } else if (classification_method == '2 sd functional') {
+        clinical_significance_cutoff <- twosd_functional_cutoff
+    } else {
+        stop(paste0(
+            'Invalid value for argument `classification_method`: "',
+            classification_method,
+            '"\n',
+            'Please provide one of the following values instead:\n',
+            ' - "recovery cutoff"\n',
+            ' - "mid of means"\n',
+            ' - "2 sd dysfunctional"\n',
+            ' - "2 sd functional"\n',
+            'Information on the meanings of these values can be found in the ',
+            'function documentation.'
+        ))
+    }
 
     # Draw plot ------------------------------------------------------
 
@@ -160,8 +264,8 @@ rciplot <- function(
     df_plot$diff <- df_plot$col_post - df_plot$col_pre
     if (higher_is_better) {
         df_plot <- df_plot %>%
-            mutate(category = case_when(
-                (diff > diff_crit) & col_post > recovery_cutoff ~
+            mutate(category_raw = case_when(
+                (diff > diff_crit) & (col_post > recovery_cutoff) ~
                     'reliable recovery',
                 (diff > diff_crit) ~
                     'reliable improvement',
@@ -172,10 +276,10 @@ rciplot <- function(
                 T ~
                     'no reliable change'
             )) %>%
-            mutate_at('category', as.factor)
+            mutate_at('category_raw', as.factor)
     } else {
         df_plot <- df_plot %>%
-            mutate(category = case_when(
+            mutate(category_raw = case_when(
                 (diff < (diff_crit * -1)) & col_post < recovery_cutoff ~
                     'reliable recovery',
                 (diff < (diff_crit * -1)) ~
@@ -187,24 +291,24 @@ rciplot <- function(
                 T ~
                     'no reliable change'
             )) %>%
-            mutate_at('category', as.factor)
+            mutate_at('category_raw', as.factor)
     }
 
     if (show_classification_counts) {
         count_relrec <- df_plot %>%
-            dplyr::filter(category == 'reliable recovery') %>%
+            dplyr::filter(category_raw == 'reliable recovery') %>%
             nrow()
         count_relimp <- df_plot %>%
-            dplyr::filter(category == 'reliable improvement') %>%
+            dplyr::filter(category_raw == 'reliable improvement') %>%
             nrow()
         count_reldet <- df_plot %>%
-            dplyr::filter(category == 'reliable deterioration') %>%
+            dplyr::filter(category_raw == 'reliable deterioration') %>%
             nrow()
         count_nonrec <- df_plot %>%
-            dplyr::filter(category == 'non-reliable recovery') %>%
+            dplyr::filter(category_raw == 'non-reliable recovery') %>%
             nrow()
         count_nochan <- df_plot %>%
-            dplyr::filter(category == 'no reliable change') %>%
+            dplyr::filter(category_raw == 'no reliable change') %>%
             nrow()
         label_relrec <- paste0(
             'reliable recovery: ',
@@ -250,7 +354,7 @@ rciplot <- function(
         }
         df_plot <- df_plot %>%
             mutate(category = recode(
-                category,
+                category_raw,
                 'reliable recovery' = label_relrec,
                 'reliable improvement' = label_relimp,
                 'reliable deterioration' = label_reldet,
@@ -432,19 +536,24 @@ rciplot <- function(
     output <- list(
         higher_is_better = higher_is_better,
         reliable_change = diff_crit,
-        plot = plot
+        plot = plot,
+        categorization = df_plot$category_raw
     )
 
     output
 }
 ## This is my ultimate testing section for maximum comfort in debugging new
 ## features of `rciplot()`:
+# library(dplyr)
+# library(tibble)
+# library(ggplot2)
 # load('data/sample_data.rda')
 # result <- rciplot(
 #     data = sample_data,
 #     pre = 'pre_data',
 #     post = 'post_data',
 #     reliability = 0.88,
+#     reliable_change_alpha = .05,
 #     recovery_cutoff = 104,
 #     show_classification_percentages = T,
 #     higher_is_better = T,
@@ -458,9 +567,12 @@ rciplot <- function(
 #     sd_dysfunctional = 7.5
 # )
 # result$plot
+# result$reliable_change
+# result$categorization
 
 utils::globalVariables(c(
     'category',
+    'category_raw',
     'col_pre',
     'col_post',
     'intercept',

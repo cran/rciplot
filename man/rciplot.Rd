@@ -10,7 +10,9 @@ rciplot(
   post = NULL,
   group = NULL,
   reliability = NULL,
+  reliable_change_alpha = 0.05,
   recovery_cutoff = NULL,
+  classification_method = "recovery cutoff",
   show_classification_counts = TRUE,
   show_classification_percentages = TRUE,
   higher_is_better = TRUE,
@@ -40,8 +42,23 @@ of scatter plot points)}
 
 \item{reliability}{Reliability of the used test / instrument}
 
+\item{reliable_change_alpha}{Probability of alpha error for the calculation
+of the critical distance which is the minimum pre-post difference to be
+regarded statistically significant}
+
 \item{recovery_cutoff}{Test score below which individuals are considered
 healthy / recovered}
+
+\item{classification_method}{What cutoff value is to be used to classify
+individuals into healthy / unhealthy individuals?
+Possible values:
+"recovery cutoff" = the so-named function parameter,
+"mid of means" = the exact numeric mid between the two function parameters
+mean_functional and mean_dysfunctional,
+"2 sd dysfunctional" = everybody with a score higher than 2 SD above the
+dysfunctional group mean is healthy
+"2 sd functional" = everybody with a score higher than 2 SD below the
+functional group mean is healthy}
 
 \item{show_classification_counts}{If TRUE, show number of cases for each
 classification (e.g. reliable improvement, no reliable change, ...) in legend}
@@ -102,6 +119,10 @@ A list containing:\tabular{ll}{
    \tab \cr
    \code{plot} \tab
        ggplot2 scatter plot analogous to Figure 2 of Jacobson & Truax (1991)
+       \cr
+   \code{categorization} \tab
+       List containing categorization of all samples given in \code{data}.
+       Thus, has as many items as \code{data} has rows.
        \cr
 }
 }
